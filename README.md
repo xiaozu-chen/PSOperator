@@ -28,6 +28,11 @@ globally installed `tauri` command. On Windows, the current configuration
 builds both an NSIS setup executable and an MSI in
 `src-tauri/target/release/bundle/`.
 
+The first release build compiles the Rust dependencies and can take several
+minutes. Later builds reuse Cargo's cache. Release builds use thin LTO and
+multiple codegen units to reduce link time while retaining release
+optimizations.
+
 The Windows installers use Tauri's default WebView2 bootstrapper mode: machines
 without the WebView2 runtime need an internet connection during installation.
 Recent Windows 10 and Windows 11 installations generally already include it.
@@ -92,11 +97,45 @@ may not behave correctly in either pane.
 - Not a real terminal (no PTY). Full-screen TUIs such as `vim` or `htop` won't work.
 - Interrupting restarts the session in the same directory, so variables defined
   earlier are lost.
-- Sessions start with `-NoProfile` by default so prompts and themes (oh-my-posh, etc.)
-  don't pollute output. Turn on "Load my PowerShell profile" in `/settings` (or
-  Ctrl+,) to run `$PROFILE`; it applies to new tabs and after `/restart`. Settings are
+- Sessions load `$PROFILE` by default so PATH entries, functions, aliases, and
+  environment setup from regular PowerShell are available. Turn off "Load my
+  PowerShell profile" in `/settings` (or Ctrl+,) to use `-NoProfile`. The setting applies to
+  new tabs and after `/restart`. Settings are
   saved to `settings.json` in the app config directory
   (the existing `%APPDATA%\dev.psoperator.shell\` app-data folder).
 - PSOperator requires Windows PowerShell 5.1, which is included with supported
   Windows versions. PowerShell 7 is optional; PSOperator prefers it when available
   with the shell set to Auto.
+
+## Python and external tools
+
+PSOperator runs PowerShell commands in the current working directory. To activate
+a Python environment from PowerShell, use `.\venv\Scripts\Activate.ps1` (adjust the path
+to your environment). Activation normally prints nothing; the `venv` badge on
+the tab and `/status` show whether `VIRTUAL_ENV` was set. PSOperator restores an
+active environment after restarting its shell session.
+
+Tools such as `unsloth` and `llama-server` are separate programs, not bundled
+with PSOperator. Install them in the active environment or add their executable
+directories to `PATH`. You can check discovery with `Get-Command unsloth` or
+`Get-Command llama-server`; if PowerShell cannot find one, the command will not
+launch. For llama.cpp builds that do not add `llama-server.exe` to `PATH`, invoke
+it by its full path, for example `& 'C:\path\to\llama-server.exe' --help`.
+
+## Fix report (2026-10-14)
+
+- PowerShell profiles load by default, making profile-defined commands and
+  environment setup available. Shell startup also merges current Windows User
+  and Machine PATH entries with the app's inherited PATH.
+- A newly activated virtual environment with a valid `Scripts\python.exe` is
+  recognized as a successful activation even when the activation script is
+  silent.
+- Bare carriage-return build updates are sent to the progress display instead
+  of being appended as transcript lines. Cargo dependency progress reports a
+  percentage in the progress display.
+- Completion and slash-command menus float above the prompt, so opening them
+  does not resize the transcript or move the welcome panel.
+- Release builds use thin LTO and multiple codegen units to reduce link time.
+
+These changes passed `git diff --check`. A build and interactive verification
+were not run as part of this fix report.

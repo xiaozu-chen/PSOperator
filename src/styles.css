@@ -2205,6 +2205,11 @@ code {
   transition: border-color 0.12s;
 }
 
+.prompt-control {
+  position: relative;
+  width: 100%;
+}
+
 .prompt-box:focus-within {
   border-color: var(--border-focus);
 }
@@ -2325,6 +2330,10 @@ code {
 }
 
 .slash-menu {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  bottom: 100%;
   list-style: none;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2340,8 +2349,10 @@ code {
 }
 
 .completion-menu {
-  position: static;
-  align-self: flex-start;
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  bottom: 100%;
   width: min(68ch, 100%);
   max-height: min(260px, 42vh);
   overflow-y: auto;

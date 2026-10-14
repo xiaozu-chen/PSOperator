@@ -41,6 +41,9 @@ const MARK: char = '\u{1e}';
 const BOOTSTRAP: &[&str] = &[
     // UTF-8 everywhere, no progress bars.
     "try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); $OutputEncoding = [Console]::OutputEncoding } catch {}; try { if ($PSStyle) { $PSStyle.OutputRendering = 'Ansi' } } catch {}; $ProgressPreference = 'SilentlyContinue'; $global:__psoperator_bad = $false; $global:PSModuleAutoLoadingPreference = 'All'",
+    // A GUI app can keep an old environment block after PATH is updated. Merge
+    // the current User and Machine PATH values into the profile-adjusted path.
+    "try { $paths = @($env:PATH, [Environment]::GetEnvironmentVariable('Path', 'User'), [Environment]::GetEnvironmentVariable('Path', 'Machine')); $env:PATH = ((($paths -join ';') -split ';' | Where-Object { $_ } | Select-Object -Unique) -join ';') } catch {}",
     // Format explicitly caught errors. Ordinary output and errors use PowerShell's
     // native stdout/stderr so flushed, non-newline output can stream to the UI.
     r#"function global:__psoperator_split { process { if ($_ -is [System.Management.Automation.ErrorRecord]) { if ($_.FullyQualifiedErrorId -like 'NativeCommandError*') { [Console]::Error.WriteLine($_.ToString()); [Console]::Error.Flush() } else { $global:__psoperator_bad = $true; $t = ($_ | Out-String).TrimEnd(); foreach ($l in ($t -split '\r\n|\r|\n')) { [Console]::Out.WriteLine([string][char]30 + 'E ' + $l); [Console]::Out.Flush() } } } else { $_ } } }"#,
@@ -77,7 +80,7 @@ struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            load_profile: false,
+            load_profile: true,
             split_mode: "manual".into(),
             shell: "auto".into(),
             font_size: 13.5,
@@ -220,6 +223,7 @@ struct OutputPayload {
     /// "out" | "err"
     kind: &'static str,
     text: String,
+    replace: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -302,9 +306,11 @@ fn build_line(id: &str, command: &str) -> String {
     format!(
         "[Console]::Error.WriteLine([string][char]30 + 'B {id}'); [Console]::Error.Flush(); \
          $global:__psoperator_bad = $false; $global:__psoperator_error_count = $Error.Count; $global:LASTEXITCODE = 0; \
+         $global:__psoperator_venv_before = $env:VIRTUAL_ENV; \
          try {{ . ([scriptblock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{b64}')))) }} \
          catch {{ $global:__psoperator_bad = $true; $_ | __psoperator_split }}; \
          if ($Error.Count -gt $global:__psoperator_error_count) {{ $global:__psoperator_bad = $true }}; \
+         if ($env:VIRTUAL_ENV -and $env:VIRTUAL_ENV -ne $global:__psoperator_venv_before -and (Test-Path -LiteralPath (Join-Path $env:VIRTUAL_ENV 'Scripts/python.exe'))) {{ $global:__psoperator_bad = $false; $global:LASTEXITCODE = 0 }}; \
          [Console]::Error.WriteLine([string][char]30 + 'Z {id}'); [Console]::Error.Flush(); \
          __psoperator_done '{id}'\n"
     )
@@ -533,29 +539,30 @@ fn restart(
 fn read_console_record<R: BufRead>(
     reader: &mut R,
     buf: &mut Vec<u8>,
-    skip_lf: &mut bool,
-) -> std::io::Result<Option<usize>> {
+) -> std::io::Result<Option<(usize, bool)>> {
     buf.clear();
     loop {
         let available = reader.fill_buf()?;
         if available.is_empty() {
-            return Ok((!buf.is_empty()).then_some(buf.len()));
-        }
-
-        if *skip_lf {
-            *skip_lf = false;
-            if available[0] == b'\n' {
-                reader.consume(1);
-                continue;
-            }
+            return Ok((!buf.is_empty()).then_some((buf.len(), false)));
         }
 
         if let Some(index) = available.iter().position(|byte| *byte == b'\r' || *byte == b'\n') {
             buf.extend_from_slice(&available[..index]);
             let delimiter = available[index];
             reader.consume(index + 1);
-            *skip_lf = delimiter == b'\r';
-            return Ok(Some(buf.len()));
+            let replace = if delimiter == b'\r' {
+                let next = reader.fill_buf()?;
+                if next.first() == Some(&b'\n') {
+                    reader.consume(1);
+                    false
+                } else {
+                    true
+                }
+            } else {
+                false
+            };
+            return Ok(Some((buf.len(), replace)));
         }
 
         let count = available.len();
@@ -642,10 +649,9 @@ fn read_stderr(
 ) {
     let mut reader = BufReader::new(stderr);
     let mut buf = Vec::new();
-    let mut skip_lf = false;
     loop {
-        let count = match read_console_record(&mut reader, &mut buf, &mut skip_lf) {
-            Ok(Some(count)) => count,
+        let (count, replace) = match read_console_record(&mut reader, &mut buf) {
+            Ok(Some(record)) => record,
             Ok(None) | Err(_) => break,
         };
         let line = String::from_utf8_lossy(&buf[..count]);
@@ -662,7 +668,8 @@ fn read_stderr(
                     tab_id: tab_id.clone(),
                     id: running_id,
                     kind: "err",
-                    text: format!("{output}\n"),
+                    text: if replace { output.to_string() } else { format!("{output}\n") },
+                    replace,
                 },
             );
         }
@@ -698,6 +705,7 @@ fn handle_line(
                 id: running_id.clone(),
                 kind: "out",
                 text: text.to_string(),
+                replace: false,
             },
         );
     }
@@ -713,6 +721,7 @@ fn handle_line(
                     id: running_id,
                     kind: "err",
                     text: format!("{}\n", ctrl.get(2..).unwrap_or("")),
+                    replace: false,
                 },
             );
         }

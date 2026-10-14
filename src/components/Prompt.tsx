@@ -393,32 +393,33 @@ export function Prompt({
         </div>
       )}
 
-      {menuOpen ? (
-        <ul className="slash-menu" role="listbox">
-          {menuItems.map((c, i) => (
-            <li key={c.name} role="option" aria-selected={i === menuSel} className={i === menuSel ? "selected" : ""}
-              onMouseEnter={() => setMenuSel(i)} onMouseDown={(e) => { e.preventDefault(); submit(c.name); }}>
-              <span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span>
-            </li>
-          ))}
-        </ul>
-      ) : completionItems.length > 0 ? (
-        <ul ref={completionMenuRef} className="completion-menu" role="listbox" aria-label="Completions">
-          {completionItems.map((item, i) => (
-            <li key={`${item.value}-${i}`} role="option" aria-selected={i === menuSel} className={i === menuSel ? "selected" : ""}
-              onMouseEnter={() => setMenuSel(i)} onMouseDown={(event) => { event.preventDefault(); acceptCompletion(item); }}>
-              <span className="completion-label">{item.label}</span>
-              {item.detail && item.detail !== item.label && <span className="completion-detail">{item.detail}</span>}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <div className="prompt-control">
+        {menuOpen ? (
+          <ul className="slash-menu" role="listbox">
+            {menuItems.map((c, i) => (
+              <li key={c.name} role="option" aria-selected={i === menuSel} className={i === menuSel ? "selected" : ""}
+                onMouseEnter={() => setMenuSel(i)} onMouseDown={(e) => { e.preventDefault(); submit(c.name); }}>
+                <span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span>
+              </li>
+            ))}
+          </ul>
+        ) : completionItems.length > 0 ? (
+          <ul ref={completionMenuRef} className="completion-menu" role="listbox" aria-label="Completions">
+            {completionItems.map((item, i) => (
+              <li key={`${item.value}-${i}`} role="option" aria-selected={i === menuSel} className={i === menuSel ? "selected" : ""}
+                onMouseEnter={() => setMenuSel(i)} onMouseDown={(event) => { event.preventDefault(); acceptCompletion(item); }}>
+                <span className="completion-label">{item.label}</span>
+                {item.detail && item.detail !== item.label && <span className="completion-detail">{item.detail}</span>}
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
-      <div className={`prompt-box${running ? " busy" : ""}${disabled ? " disabled" : ""}`}>
-        <span className="prompt-caret">{running ? "›" : ">"}</span>
-        <div className="prompt-input-wrap">
-          {prediction && <div className="prompt-inline-ghost" aria-hidden="true"><span>{value}</span><span className="prompt-inline-suffix">{prediction}</span></div>}
-          <textarea
+        <div className={`prompt-box${running ? " busy" : ""}${disabled ? " disabled" : ""}`}>
+          <span className="prompt-caret">{running ? "›" : ">"}</span>
+          <div className="prompt-input-wrap">
+            {prediction && <div className="prompt-inline-ghost" aria-hidden="true"><span>{value}</span><span className="prompt-inline-suffix">{prediction}</span></div>}
+            <textarea
             ref={inputRef}
             rows={1}
             autoFocus
@@ -434,12 +435,12 @@ export function Prompt({
             }}
             onSelect={(e) => setCaretAtEnd(e.currentTarget.selectionStart === e.currentTarget.value.length && e.currentTarget.selectionEnd === e.currentTarget.value.length)}
             onKeyDown={onKeyDown}
-          />
-        </div>
-        {processPaneAction && <button type="button" className="process-pane-icon" aria-label="Move process to pane" title={`Move process to pane: ${processPaneAction.command}`} onMouseDown={(event) => event.preventDefault()} onClick={processPaneAction.onClick}>
-          <SplitPaneIcon />
-        </button>}
-        <button disabled={disabled} className={`follow-output-icon${followingOutput ? " active" : ""}`} aria-label={followingOutput ? "Stop following output" : "Follow output"} aria-pressed={followingOutput} onMouseMove={(event) => {
+            />
+          </div>
+          {processPaneAction && <button type="button" className="process-pane-icon" aria-label="Move process to pane" title={`Move process to pane: ${processPaneAction.command}`} onMouseDown={(event) => event.preventDefault()} onClick={processPaneAction.onClick}>
+            <SplitPaneIcon />
+          </button>}
+          <button disabled={disabled} className={`follow-output-icon${followingOutput ? " active" : ""}`} aria-label={followingOutput ? "Stop following output" : "Follow output"} aria-pressed={followingOutput} onMouseMove={(event) => {
           const tip = event.currentTarget;
           const { clientX: x, clientY: y } = event;
           const bubble = tip.parentElement?.querySelector<HTMLElement>(".follow-tooltip");
@@ -456,19 +457,20 @@ export function Prompt({
           const top = placeAbove ? y - gap - tooltipHeight : y + gap;
           bubble.style.left = `${Math.max(6, Math.min(left, window.innerWidth - tooltipWidth - 6))}px`;
           bubble.style.top = `${Math.max(6, Math.min(top, window.innerHeight - tooltipHeight - 6))}px`;
-        }} onMouseLeave={(event) => {
+          }} onMouseLeave={(event) => {
           const bubble = event.currentTarget.parentElement?.querySelector<HTMLElement>(".follow-tooltip");
           if (bubble) bubble.style.display = "none";
-        }} onBlur={(event) => {
+          }} onBlur={(event) => {
           const bubble = event.currentTarget.parentElement?.querySelector<HTMLElement>(".follow-tooltip");
           if (bubble) bubble.style.display = "none";
-        }} onFocus={(event) => {
+          }} onFocus={(event) => {
           const bubble = event.currentTarget.parentElement?.querySelector<HTMLElement>(".follow-tooltip");
           if (bubble) bubble.style.display = "block";
-        }} onMouseDown={(event) => event.preventDefault()} onClick={onToggleFollowOutput}>
-          <PromptIcon following={followingOutput} />
-        </button>
-        <span className="follow-tooltip" role="tooltip">{followingOutput ? "Following output" : "Follow output"}</span>
+          }} onMouseDown={(event) => event.preventDefault()} onClick={onToggleFollowOutput}>
+            <PromptIcon following={followingOutput} />
+          </button>
+          <span className="follow-tooltip" role="tooltip">{followingOutput ? "Following output" : "Follow output"}</span>
+        </div>
       </div>
 
       {showKeys && (

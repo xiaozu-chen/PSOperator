@@ -23,6 +23,13 @@ export interface CommandProgress {
 
 function progressInfo(text: string): CommandProgress | null {
   const plain = text.replace(/\x1b\[[0-9;]*m/g, "");
+  const cargo = /^\s*Building\s+\[[^\]]*\]\s*(\d+)\s*\/\s*(\d+)\s*:/i.exec(plain);
+  if (cargo) {
+    const done = Number(cargo[1]);
+    const total = Number(cargo[2]);
+    return { label: "Building Rust dependencies", percent: total > 0 ? Math.min(100, Math.round(done / total * 100)) : null };
+  }
+
   const stage = TRANSIENT_PROGRESS.exec(plain)?.[1];
   if (stage) {
     const percent = /\b(\d{1,3})%/.exec(plain)?.[1];
@@ -46,6 +53,7 @@ interface OutputPayload {
   id: string | null;
   kind: "out" | "err";
   text: string;
+  replace?: boolean;
 }
 
 interface ScreenCapture {
@@ -226,6 +234,11 @@ export function useShell(tabId: string, initialCwd?: string) {
 
     void on<OutputPayload>("psoperator://output", (p) => {
       if (p.tabId !== tabId || !p.id) return;
+      if (p.replace) {
+        const info = progressInfo(cleanLine(p.text));
+        if (info) setProgress(info);
+        return;
+      }
       if (p.kind === "out") {
         let capture = screenCaptures.current.get(p.id);
         if (!capture) {
